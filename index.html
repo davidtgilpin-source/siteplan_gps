@@ -100,7 +100,15 @@
   }
 
   *{box-sizing:border-box;}
-  html,body{margin:0;height:100%;overflow:hidden;}
+  /* height:100% here resolves against the viewport (html has no sized parent),
+     which on mobile is ambiguous between the browser's "large" viewport
+     (address bar hidden) and the actually-visible one (address bar showing) --
+     when the two disagree, #app ends up taller than what's really on screen,
+     pushing bottom-anchored content (the Position/Layers panels) below the
+     visible fold. 100dvh tracks the true current viewport and is layered in
+     as a progressive-enhancement override -- unsupported browsers simply
+     ignore the invalid declaration and keep the 100% above. */
+  html,body{margin:0;height:100%;height:100dvh;overflow:hidden;}
   body{
     background:var(--bg); color:var(--ink);
     font-family:'Archivo',system-ui,-apple-system,sans-serif;
@@ -109,7 +117,7 @@
   .label{font-family:'Oswald',sans-serif;text-transform:uppercase;letter-spacing:.06em;}
   .mono{font-family:'JetBrains Mono',ui-monospace,monospace;font-variant-numeric:tabular-nums;}
 
-  #app{position:relative;width:100vw;height:100vh;}
+  #app{position:relative;width:100vw;height:100vh;height:100dvh;}
   canvas{position:absolute;inset:0;touch-action:none;}
 
   /* ---- title block, drafting-sheet convention: name left, sheet data right ---- */
@@ -679,15 +687,35 @@ function cssVar(name){
   return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 }
 
+// window.innerWidth/innerHeight are what CSS "100vh"-style sizing is built
+// on, but mobile browsers don't reliably fire a plain 'resize' event when
+// their own chrome (address bar) hides/shows during a touch-drag gesture --
+// so a value read once at drag-start can go stale mid-pan. visualViewport,
+// where available, reports the actual current visible area and fires its
+// own 'resize'/'scroll' events for exactly these chrome-toggle cases, so
+// prefer it everywhere the canvas or projection math needs "how big is the
+// visible area right now".
+function viewportSize(){
+  const vv = window.visualViewport;
+  return vv ? [vv.width, vv.height] : [window.innerWidth, window.innerHeight];
+}
 function resize(){
-  canvas.width = window.innerWidth * devicePixelRatio;
-  canvas.height = window.innerHeight * devicePixelRatio;
-  canvas.style.width = window.innerWidth+'px'; canvas.style.height = window.innerHeight+'px';
+  const [w,h] = viewportSize();
+  canvas.width = Math.round(w * devicePixelRatio);
+  canvas.height = Math.round(h * devicePixelRatio);
+  canvas.style.width = w+'px'; canvas.style.height = h+'px';
   ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
   positionScaleBar();
   draw();
 }
 window.addEventListener('resize', resize);
+// Belt-and-suspenders for the missed-resize-event case above: visualViewport
+// fires its own resize (and scroll, for the same chrome-toggle case on some
+// browsers) independently of window's.
+if (window.visualViewport){
+  window.visualViewport.addEventListener('resize', resize);
+  window.visualViewport.addEventListener('scroll', resize);
+}
 
 // The scale bar sits directly above the Position panel, whatever height that
 // panel currently has -- expanded or minimized -- instead of a fixed offset
@@ -714,20 +742,40 @@ function fitView(){
   let minX=Infinity,maxX=-Infinity,minZ=Infinity,maxZ=-Infinity;
   pts.forEach(([x,z])=>{ minX=Math.min(minX,x);maxX=Math.max(maxX,x);minZ=Math.min(minZ,z);maxZ=Math.max(maxZ,z); });
   const w=Math.max(maxX-minX,20), h=Math.max(maxZ-minZ,20), pad=1.25;
-  const sx=window.innerWidth/(w*pad), sz=(window.innerHeight-70)/(h*pad);
+  const [vw,vh] = viewportSize();
+  const sx=vw/(w*pad), sz=(vh-70)/(h*pad);
   view.scale = Math.min(sx,sz);
   view.cx=(minX+maxX)/2; view.cz=(minZ+maxZ)/2;
   draw();
 }
 function worldToScreen(x,z){
-  return [ window.innerWidth/2 + (x-view.cx)*view.scale, window.innerHeight/2 - (z-view.cz)*view.scale ];
+  const [vw,vh] = viewportSize();
+  return [ vw/2 + (x-view.cx)*view.scale, vh/2 - (z-view.cz)*view.scale ];
 }
 function screenToWorld(sx,sy){
-  return [ (sx-window.innerWidth/2)/view.scale+view.cx, -(sy-window.innerHeight/2)/view.scale+view.cz ];
+  const [vw,vh] = viewportSize();
+  return [ (sx-vw/2)/view.scale+view.cx, -(sy-vh/2)/view.scale+view.cz ];
 }
 
 function draw(){
-  const W=window.innerWidth, H=window.innerHeight;
+  const [W,H] = viewportSize();
+  // Self-heal: if the canvas's backing pixel buffer (set by the last resize())
+  // doesn't match the CURRENT visible area, bring it in sync before drawing
+  // anything. This is the actual fix for the "bottom half doesn't redraw,
+  // lines smear like a kaleidoscope while panning" bug -- on mobile, the
+  // address bar can hide/show mid-gesture without a resize event ever
+  // firing, leaving clearRect() below only clearing part of a canvas that's
+  // now a different size than the page thinks it is; every leftover stroke
+  // from a prior pan position then stays on screen and new ones layer on
+  // top of it. Checking here means it self-corrects every frame regardless
+  // of whether any particular resize/visualViewport event fired.
+  const wantW = Math.round(W*devicePixelRatio), wantH = Math.round(H*devicePixelRatio);
+  if (canvas.width !== wantW || canvas.height !== wantH){
+    canvas.width = wantW; canvas.height = wantH;
+    canvas.style.width = W+'px'; canvas.style.height = H+'px';
+    ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0);
+    positionScaleBar();
+  }
   const bg = cssVar('--bg'), ink = cssVar('--ink'), grid = cssVar('--grid'), marker = cssVar('--marker'), accent = cssVar('--accent'), calib = cssVar('--calib');
   ctx.clearRect(0,0,W,H);
 
