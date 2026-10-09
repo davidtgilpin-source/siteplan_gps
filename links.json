@@ -1,0 +1,42 @@
+{
+ "hotspots": {
+  "HS-Clubhouse": {
+   "docs": [
+    {
+     "num": "A1.01",
+     "title": "Site Plan",
+     "disc": "Architectural",
+     "rev": "2",
+     "date": "10/01/2026",
+     "sheet": "docs/HS-Clubhouse/A1.01"
+    },
+    {
+     "num": "A2.01",
+     "title": "Floor Plan",
+     "disc": "Architectural",
+     "rev": "2",
+     "date": "10/01/2026",
+     "sheet": "docs/HS-Clubhouse/A2.01"
+    },
+    {
+     "num": "A2.02",
+     "title": "Enlarged Floor Plan 1",
+     "disc": "Architectural",
+     "rev": "2",
+     "date": "10/01/2026",
+     "sheet": "docs/HS-Clubhouse/A2.02"
+    },
+    {
+     "num": "A2.03",
+     "title": "Enlarged Floor Plan 2",
+     "disc": "Architectural",
+     "rev": "2",
+     "date": "10/01/2026",
+     "sheet": "docs/HS-Clubhouse/A2.03"
+    }
+   ],
+   "title": "Clubhouse"
+  }
+ },
+ "structures": {}
+}
